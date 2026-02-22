@@ -4,18 +4,25 @@ import { z } from "zod/v4";
 import { loadCommands } from "./config.js";
 import { executeCommand } from "./executor.js";
 import type { Logger } from "./logger.js";
+import type { TuiManager } from "./tui.js";
 
-const CONFIG_PATH = process.env.EXO_COMMAND_FILE || "./.exocommand";
-
-export interface CreateServerOptions {
+interface CreateServerOptions {
+  configPath: string;
   taskMode?: boolean;
+  tui?: TuiManager | null;
+  agentId?: number;
+  projectKey?: string;
 }
 
 export function createServer(
   logger: Logger,
-  options?: CreateServerOptions,
+  options: CreateServerOptions,
 ): McpServer {
-  const taskMode = options?.taskMode ?? false;
+  const configPath = options.configPath;
+  const taskMode = options.taskMode ?? false;
+  const tui = options.tui ?? null;
+  const agentId = options.agentId ?? 0;
+  const projectKey = options.projectKey ?? "";
   const activeExecutions = new Map<string, AbortController>();
 
   // Build server options conditionally based on mode
@@ -51,7 +58,7 @@ export function createServer(
     },
     async () => {
       try {
-        const commands = await loadCommands(CONFIG_PATH);
+        const commands = await loadCommands(configPath);
         logger.info("listCommands", `found ${commands.length} command(s)`);
 
         return {
@@ -86,9 +93,9 @@ export function createServer(
   );
 
   if (taskMode) {
-    registerTaskMode(server, logger, activeExecutions);
+    registerTaskMode(server, logger, activeExecutions, configPath, tui, agentId, projectKey);
   } else {
-    registerSyncMode(server, logger, activeExecutions);
+    registerSyncMode(server, logger, activeExecutions, configPath, tui, agentId, projectKey);
   }
 
   return server;
@@ -117,10 +124,14 @@ function registerTaskMode(
   server: McpServer,
   logger: Logger,
   activeExecutions: Map<string, AbortController>,
+  configPath: string,
+  tui: TuiManager | null,
+  agentId: number,
+  projectKey: string,
 ): void {
   // Lazy-loaded to avoid pulling task dependencies when not needed
   const { registerTaskExecute } = require("./task.js") as typeof import("./task.js");
-  registerTaskExecute(server, logger, activeExecutions);
+  registerTaskExecute(server, logger, activeExecutions, configPath, tui, agentId, projectKey);
 }
 
 function getTaskContext(
@@ -136,6 +147,10 @@ function registerSyncMode(
   server: McpServer,
   logger: Logger,
   activeExecutions: Map<string, AbortController>,
+  configPath: string,
+  tui: TuiManager | null,
+  agentId: number,
+  projectKey: string,
 ): void {
   server.registerTool(
     "execute",
@@ -155,12 +170,15 @@ function registerSyncMode(
       },
     },
     async ({ name: commandName, timeout }, extra) => {
+      const executionId = crypto.randomUUID();
       logger.warn("execute", `running "${commandName}"`);
+      tui?.addExecution(executionId, commandName, agentId, projectKey);
 
       let commands;
       try {
-        commands = await loadCommands(CONFIG_PATH);
+        commands = await loadCommands(configPath);
       } catch (err) {
+        tui?.updateExecution(executionId, "error");
         return {
           content: [{
             type: "text" as const,
@@ -173,6 +191,7 @@ function registerSyncMode(
       const cmd = commands.find((c) => c.name === commandName);
       if (!cmd) {
         const available = commands.map((c) => c.name).join(", ");
+        tui?.updateExecution(executionId, "error");
         return {
           content: [{
             type: "text" as const,
@@ -182,7 +201,6 @@ function registerSyncMode(
         };
       }
 
-      const executionId = crypto.randomUUID();
       const ac = new AbortController();
       activeExecutions.set(executionId, ac);
 
@@ -235,6 +253,7 @@ function registerSyncMode(
             ? `Command "${commandName}" timed out after ${timeout}s.`
             : `Command "${commandName}" was cancelled.`;
 
+          tui?.updateExecution(executionId, timedOut ? "timeout" : "cancelled");
           logger.warn(
             "execute",
             `"${commandName}" ${timedOut ? "timed out" : "was cancelled"}`,
@@ -250,6 +269,7 @@ function registerSyncMode(
 
         if (result.exitCode !== 0) {
           const status = `Command "${commandName}" exited with code ${result.exitCode}`;
+          tui?.updateExecution(executionId, "error");
           logger.error(
             "execute",
             `"${commandName}" exited with code ${result.exitCode}`,
@@ -263,6 +283,7 @@ function registerSyncMode(
           };
         }
 
+        tui?.updateExecution(executionId, "success");
         logger.success("execute", `"${commandName}" completed (exit code 0)`);
         return {
           content: [{
@@ -275,6 +296,7 @@ function registerSyncMode(
       } catch (err) {
         const output = lines.join("\n");
         const status = `Command "${commandName}" failed: ${(err as Error).message}`;
+        tui?.updateExecution(executionId, "error");
         logger.error(
           "execute",
           `"${commandName}" failed: ${(err as Error).message}`,

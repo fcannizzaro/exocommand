@@ -10,8 +10,7 @@ import { z } from "zod/v4";
 import { loadCommands } from "./config.js";
 import { executeCommand } from "./executor.js";
 import type { Logger } from "./logger.js";
-
-const CONFIG_PATH = process.env.EXO_COMMAND_FILE || "./.exocommand";
+import type { TuiManager } from "./tui.js";
 
 // Subclass InMemoryTaskStore to abort running processes on task cancellation.
 // The SDK calls updateTaskStatus("cancelled") when a tasks/cancel request arrives.
@@ -52,6 +51,7 @@ interface BackgroundExecutionParams {
   server: McpServer;
   logger: Logger;
   activeExecutions: Map<string, AbortController>;
+  tui: TuiManager | null;
 }
 
 async function runBackgroundExecution(
@@ -59,7 +59,7 @@ async function runBackgroundExecution(
 ): Promise<void> {
   const {
     taskId, commandName, command, cwd, signal, timeoutSignal, timeout,
-    taskStore, server, logger, activeExecutions,
+    taskStore, server, logger, activeExecutions, tui,
   } = params;
 
   const lines: string[] = [];
@@ -104,6 +104,7 @@ async function runBackgroundExecution(
       }
 
       if (task?.status === "cancelled") {
+        tui?.updateExecution(taskId, "cancelled");
         logger.warn("execute", `"${commandName}" was cancelled`);
         return;
       }
@@ -113,6 +114,7 @@ async function runBackgroundExecution(
         ? `Command "${commandName}" timed out after ${timeout}s.`
         : `Command "${commandName}" was cancelled.`;
 
+      tui?.updateExecution(taskId, timedOut ? "timeout" : "cancelled");
       logger.warn(
         "execute",
         `"${commandName}" ${timedOut ? "timed out" : "was cancelled"}`,
@@ -129,6 +131,7 @@ async function runBackgroundExecution(
 
     if (result.exitCode !== 0) {
       const status = `Command "${commandName}" exited with code ${result.exitCode}`;
+      tui?.updateExecution(taskId, "error");
       logger.error(
         "execute",
         `"${commandName}" exited with code ${result.exitCode}`,
@@ -143,6 +146,7 @@ async function runBackgroundExecution(
       return;
     }
 
+    tui?.updateExecution(taskId, "success");
     logger.success("execute", `"${commandName}" completed (exit code 0)`);
     await taskStore.storeTaskResult(taskId, "completed", {
       content: [{
@@ -155,6 +159,7 @@ async function runBackgroundExecution(
   } catch (err) {
     const output = lines.join("\n");
     const status = `Command "${commandName}" failed: ${(err as Error).message}`;
+    tui?.updateExecution(taskId, "error");
     logger.error(
       "execute",
       `"${commandName}" failed: ${(err as Error).message}`,
@@ -203,7 +208,15 @@ export function registerTaskExecute(
   server: McpServer,
   logger: Logger,
   activeExecutions: Map<string, AbortController>,
+  configPath: string,
+  tui?: TuiManager | null,
+  agentId?: number,
+  projectKey?: string,
 ): void {
+  const resolvedTui = tui ?? null;
+  const resolvedAgentId = agentId ?? 0;
+  const resolvedProjectKey = projectKey ?? "";
+
   server.experimental.tasks.registerToolTask(
     "execute",
     {
@@ -229,7 +242,7 @@ export function registerTaskExecute(
         // Validate before creating a task — throw to fail without a zombie task
         let commands;
         try {
-          commands = await loadCommands(CONFIG_PATH);
+          commands = await loadCommands(configPath);
         } catch (err) {
           throw new Error(
             `Error loading config: ${(err as Error).message}`,
@@ -250,6 +263,9 @@ export function registerTaskExecute(
             : 300_000,
           pollInterval: 1000,
         });
+
+        // Notify TUI after task creation
+        resolvedTui?.addExecution(task.taskId, commandName, resolvedAgentId, resolvedProjectKey);
 
         // Compose abort signal from cancellation + optional timeout
         const ac = new AbortController();
@@ -282,6 +298,7 @@ export function registerTaskExecute(
           server,
           logger,
           activeExecutions,
+          tui: resolvedTui,
         }).catch(() => {
           // errors are stored in the task store, not propagated here
         });

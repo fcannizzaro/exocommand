@@ -52,27 +52,44 @@ function createLogger(agentId?: number): Logger {
   };
 }
 
-export const logger = {
+export interface RootLogger extends Logger {
+  withAgent(id: number): Logger;
+}
+
+export const logger: RootLogger = {
   ...createLogger(),
-  banner(version: string): void {
-    const v = `v${version}`;
-    // 32-char wide interior: "  ● ○ ○" (7 chars) + padding + version + "  " (2 trailing)
-    const dotsLeft = "  ● ○ ○";
-    const padLen = 32 - dotsLeft.length - v.length - 2;
-    const pad = " ".repeat(Math.max(padLen, 1));
-
-    const lines = [
-      `${DIM}  ╭────────────────────────────────╮${RESET}`,
-      `${DIM}  │${RESET}  ${RED}●${RESET} ${DIM}○ ○${pad}${v}${RESET}  ${DIM}│${RESET}`,
-      `${DIM}  │${RESET}  ${GREEN}>${RESET} ${BOLD}${CYAN}EXOCOMMAND${RESET}${GREEN}_${RESET}                 ${DIM}├══════╗${RESET}`,
-      `${DIM}  ╰────────────────────────────────╯ ┌════╝${RESET}`,
-      `${DIM}                                     └══╗${RESET}`,
-      `${DIM}                                        ╹${RESET}`,
-    ];
-
-    console.log(lines.join("\n"));
-  },
   withAgent(id: number): Logger {
     return createLogger(id);
   },
 };
+
+// TUI-aware logger that delegates to TuiManager instead of console
+export function createTuiLogger(tui: import("./tui.js").TuiManager): RootLogger {
+  function makeLogger(agentId?: number): Logger {
+    return {
+      info(event: string, message: string): void {
+        const msg = agentId !== undefined ? `[agent ${agentId}] ${message}` : message;
+        tui.logMessage("info", event, msg);
+      },
+      success(event: string, message: string): void {
+        const msg = agentId !== undefined ? `[agent ${agentId}] ${message}` : message;
+        tui.logMessage("success", event, msg);
+      },
+      warn(event: string, message: string): void {
+        const msg = agentId !== undefined ? `[agent ${agentId}] ${message}` : message;
+        tui.logMessage("warn", event, msg);
+      },
+      error(event: string, message: string): void {
+        const msg = agentId !== undefined ? `[agent ${agentId}] ${message}` : message;
+        tui.logMessage("error", event, msg);
+      },
+    };
+  }
+
+  return {
+    ...makeLogger(),
+    withAgent(id: number): Logger {
+      return makeLogger(id);
+    },
+  };
+}

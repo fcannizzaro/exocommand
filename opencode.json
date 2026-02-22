@@ -4,6 +4,9 @@
     "exocommand": {
       "enabled": true,
       "type": "remote",
+      "headers": {
+        "exocommand-project": "72ef3289b0bb"
+      },
       "url": "http://host.docker.internal:5555/mcp"
     }
   }

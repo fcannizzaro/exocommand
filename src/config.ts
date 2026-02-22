@@ -1,14 +1,15 @@
 import { readFile, writeFile, access } from "node:fs/promises";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 
-export interface ExoCommand {
+interface ExoCommand {
   name: string;
   description: string;
   command: string;
   cwd?: string;
 }
 
-export interface ExoConfig {
+interface ExoConfig {
   port?: number;
   taskMode?: boolean;
   commands: ExoCommand[];
@@ -95,11 +96,18 @@ export async function loadConfig(filePath: string): Promise<ExoConfig> {
       cwd?: string;
     };
 
+    // Resolve relative cwd against the config file's directory
+    const resolvedCwd = cwd
+      ? isAbsolute(cwd)
+        ? cwd
+        : resolve(dirname(filePath), cwd)
+      : undefined;
+
     config.commands.push({
       name,
       description,
       command: command.trim(),
-      ...(cwd ? { cwd } : {}),
+      ...(resolvedCwd ? { cwd: resolvedCwd } : {}),
     });
   }
 
