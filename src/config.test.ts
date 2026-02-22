@@ -1,6 +1,6 @@
 import { test, expect, describe, beforeAll, afterAll } from "bun:test";
 import { loadConfig, loadCommands } from "./config";
-import { join } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
@@ -323,6 +323,51 @@ hello:
     );
 
     expect(loadCommands(path)).rejects.toThrow('"cwd" must be a string');
+  });
+
+  test("resolves relative cwd against config file directory", async () => {
+    const path = await writeConfig(
+      "cwd-relative.yaml",
+      `
+hello:
+  description: "hi"
+  command: "echo hi"
+  cwd: "../other"
+`,
+    );
+
+    const commands = await loadCommands(path);
+    expect(commands[0]!.cwd).toBe(resolve(dirname(path), "../other"));
+  });
+
+  test("preserves absolute cwd as-is", async () => {
+    const path = await writeConfig(
+      "cwd-absolute.yaml",
+      `
+hello:
+  description: "hi"
+  command: "echo hi"
+  cwd: "/usr/local/bin"
+`,
+    );
+
+    const commands = await loadCommands(path);
+    expect(commands[0]!.cwd).toBe("/usr/local/bin");
+  });
+
+  test("resolves dot cwd to config file directory", async () => {
+    const path = await writeConfig(
+      "cwd-dot.yaml",
+      `
+hello:
+  description: "hi"
+  command: "echo hi"
+  cwd: "."
+`,
+    );
+
+    const commands = await loadCommands(path);
+    expect(commands[0]!.cwd).toBe(dirname(path));
   });
 });
 
