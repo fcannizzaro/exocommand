@@ -1,0 +1,57 @@
+{
+  "name": "@fcannizzaro/exocommand",
+  "module": "index.ts",
+  "description": "An MCP server that exposes user-defined shell commands as tools for AI coding assistants",
+  "version": "1.0.9",
+  "type": "module",
+  "main": "dist/index.js",
+  "homepage": "https://github.com/fcannizzaro/exocommand",
+  "author": {
+    "name": "Francesco Saverio Cannizzaro (fcannizzaro)",
+    "url": "https://fcannizzaro.com"
+  },
+  "funding": [
+    {
+      "type": "patreon",
+      "url": "https://www.patreon.com/fcannizzaro"
+    }
+  ],
+  "bugs": {
+    "url": "https://github.com/fcannizzaro/exocommand/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fcannizzaro/exocommand"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "postbuild": "bun scripts/postbuild.ts",
+    "test": "bun test"
+  },
+  "bin": {
+    "exocommand": "./dist/index.js"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.9",
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "yaml": "^2.8.2"
+  },
+  "keywords": [
+    "exocommand",
+    "mcp",
+    "agentic-programming",
+    "mcp",
+    "model-context-protocol"
+  ]
+}

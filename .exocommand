@@ -1,0 +1,31 @@
+hello:
+  description: "Print hello world"
+  command: "echo 'Hello, World!'"
+
+list-files:
+  description: "List files in external directory"
+  command: "ls -a"
+  cwd: ../
+
+multiline-test:
+  description: "Test multiline command execution"
+  command: |
+    echo "Step 1: Starting"
+    echo "Step 2: Processing"
+    echo "Step 3: Done"
+
+long-running-test:
+  description: "Test long-running command"
+  command: |
+    echo "Starting long-running task..."
+    while true; do
+      echo "Still running... $(date)"
+      sleep 1
+    done
+
+error-test:
+  description: "Test stderr output"
+  command: |
+    echo "stdout line"
+    echo "stderr line" >&2
+    echo "another stdout line"
