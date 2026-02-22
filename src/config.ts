@@ -10,12 +10,13 @@ export interface ExoCommand {
 
 export interface ExoConfig {
   port?: number;
+  taskMode?: boolean;
   commands: ExoCommand[];
 }
 
 const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
-const RESERVED_KEYS = new Set(["port"]);
+const RESERVED_KEYS = new Set(["port", "taskMode"]);
 
 export async function loadConfig(filePath: string): Promise<ExoConfig> {
   try {
@@ -45,6 +46,17 @@ export async function loadConfig(filePath: string): Promise<ExoConfig> {
       );
     }
     config.port = port;
+  }
+
+  // Parse taskMode
+  const rawTaskMode = (parsed as Record<string, unknown>).taskMode;
+  if (rawTaskMode !== undefined) {
+    if (typeof rawTaskMode !== "boolean") {
+      throw new Error(
+        `Invalid taskMode "${rawTaskMode}": must be a boolean (true or false)`,
+      );
+    }
+    config.taskMode = rawTaskMode;
   }
 
   // Parse commands

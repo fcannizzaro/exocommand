@@ -19,7 +19,8 @@ Exocommand lets you define a curated set of shell commands in a simple YAML file
 
 - **YAML configuration** -- Define commands in a `.exocommand` file with a name, description, and shell command.
 - **Live reload** -- The server watches the config file for changes and notifies connected clients automatically.
-- **Streaming output** -- stdout and stderr are streamed line-by-line back to the client in real time.
+- **Streaming output** -- By default, stdout and stderr are streamed line-by-line to the client via SSE in real time. If the server crashes mid-execution, the client retains all lines already received.
+- **Task mode** -- Opt-in execution mode backed by the MCP experimental tasks API for crash-resilient, independently-pollable command execution.
 - **Cancellation** -- Long-running commands can be cancelled by the client; the spawned process is killed immediately.
 - **Multi-session** -- Uses the Streamable HTTP transport, supporting multiple concurrent MCP sessions.
 - **Configurable port** -- Set via the config file, the `EXO_PORT` environment variable, or defaults to `5555`.
@@ -46,6 +47,9 @@ Create a `.exocommand` file in the project root (or set a custom path with the `
 # Optional: override the default port
 port: 4444
 
+# Optional: enable task-based execution mode (default: false)
+# taskMode: true
+
 build:
   description: "Run the production build"
   command: "cargo build --release"
@@ -60,7 +64,7 @@ list-external:
   cwd: ../
 ```
 
-Each top-level key (except `port`) is a command name. Names may contain letters, numbers, hyphens, and underscores.
+Each top-level key (except reserved keys like `port` and `taskMode`) is a command name. Names may contain letters, numbers, hyphens, and underscores.
 
 | Field | Required | Description |
 | --- | --- | --- |
@@ -73,7 +77,16 @@ Each top-level key (except `port`) is a command name. Names may contain letters,
 | Variable | Description | Default |
 | --- | --- | --- |
 | `EXO_COMMAND_FILE` | Path to the `.exocommand` config file | `./.exocommand` |
-| `EXO_PORT` | Server port (overrides config file) | `3000` |
+| `EXO_PORT` | Server port (overrides config file) | `5555` |
+| `EXO_TASK_MODE` | Enable task mode (`true` or `1`, overrides config file) | `false` |
+
+### Execution Modes
+
+The `execute` tool supports two execution modes:
+
+**Streaming (default)** -- Each output line is sent as an SSE event on the response stream as it happens. The client receives lines in real time. If the server crashes mid-execution, all lines sent up to that point are already with the client. Cancellation works through the standard MCP request signal (client disconnect or `notifications/cancelled`).
+
+**Task mode** -- Enabled via `taskMode: true` in the config file or `EXO_TASK_MODE=true`. Uses the MCP experimental tasks API. The server creates a background task, and clients can poll its status independently. Task-aware clients get full crash resilience (disconnect, reconnect, and resume polling). Supports structured cancellation via `tasks/cancel`.
 
 ## Safety
 

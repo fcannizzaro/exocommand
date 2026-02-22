@@ -18,6 +18,7 @@ const CONFIG_PATH = process.env.EXO_COMMAND_FILE || "./.exocommand";
 const transports = new Map<string, WebStandardStreamableHTTPServerTransport>();
 const servers = new Set<McpServer>();
 let nextAgentId = 0;
+let taskMode = false;
 
 async function handleMcp(req: Request): Promise<Response> {
   const url = new URL(req.url);
@@ -67,7 +68,7 @@ async function handleMcp(req: Request): Promise<Response> {
         },
       });
 
-      const server = createServer(agentLogger);
+      const server = createServer(agentLogger, { taskMode });
       servers.add(server);
 
       transport.onclose = () => {
@@ -126,6 +127,17 @@ async function main() {
   const PORT = parseInt(
     process.env.EXO_PORT || String(config.port ?? 5555),
     10,
+  );
+
+  // Resolve task mode: env var overrides config
+  const envTaskMode = process.env.EXO_TASK_MODE;
+  taskMode = envTaskMode !== undefined
+    ? envTaskMode === "true" || envTaskMode === "1"
+    : config.taskMode ?? false;
+
+  logger.info(
+    "startup",
+    `execution mode: ${taskMode ? "task" : "streaming"}`,
   );
 
   try {

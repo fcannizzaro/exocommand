@@ -325,3 +325,79 @@ hello:
     expect(loadCommands(path)).rejects.toThrow('"cwd" must be a string');
   });
 });
+
+describe("loadConfig taskMode", () => {
+  test("parses taskMode: true", async () => {
+    const path = await writeConfig(
+      "taskmode-true.yaml",
+      `
+taskMode: true
+hello:
+  description: "hi"
+  command: "echo hi"
+`,
+    );
+
+    const config = await loadConfig(path);
+    expect(config.taskMode).toBe(true);
+  });
+
+  test("parses taskMode: false", async () => {
+    const path = await writeConfig(
+      "taskmode-false.yaml",
+      `
+taskMode: false
+hello:
+  description: "hi"
+  command: "echo hi"
+`,
+    );
+
+    const config = await loadConfig(path);
+    expect(config.taskMode).toBe(false);
+  });
+
+  test("absent taskMode defaults to undefined", async () => {
+    const path = await writeConfig(
+      "taskmode-absent.yaml",
+      `
+hello:
+  description: "hi"
+  command: "echo hi"
+`,
+    );
+
+    const config = await loadConfig(path);
+    expect(config.taskMode).toBeUndefined();
+  });
+
+  test("rejects non-boolean taskMode", async () => {
+    const path = await writeConfig(
+      "taskmode-string.yaml",
+      `
+taskMode: "yes"
+hello:
+  description: "hi"
+  command: "echo hi"
+`,
+    );
+
+    expect(loadConfig(path)).rejects.toThrow("Invalid taskMode");
+  });
+
+  test("taskMode is not treated as a command", async () => {
+    const path = await writeConfig(
+      "taskmode-reserved.yaml",
+      `
+taskMode: true
+hello:
+  description: "hi"
+  command: "echo hi"
+`,
+    );
+
+    const config = await loadConfig(path);
+    expect(config.commands).toHaveLength(1);
+    expect(config.commands[0]!.name).toBe("hello");
+  });
+});
